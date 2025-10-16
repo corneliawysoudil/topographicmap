@@ -21,8 +21,8 @@ export default function Topography({ pointer, speed, isFist }: Props) {
     uTime: { value: 0 },
     uNoiseScale: { value: 11.0 },
     uNoiseOffset: { value: new THREE.Vector2() },
-    uLineStep: { value: 0.05 },
-    uLineThickness: { value: 0.02 },
+    uLineStep: { value: 0.03 },
+    uLineThickness: { value: 0.025 },
     uEmissiveStrength: { value: 1.0 },
     uBaseColor: { value: new THREE.Color(0.02, 0.02, 0.025) },
     uLineColor: { value: new THREE.Color(1, 1, 1) },
@@ -33,6 +33,7 @@ export default function Topography({ pointer, speed, isFist }: Props) {
     uRippleSpeed: { value: 3.0 },
     uGlobalRippleStart: { value: -999 },
     uRedTint: { value: 0.0 },
+    uPeakyness: { value: 0.0 },
   }), [])
 
   const vertexShader = useMemo(() => `
@@ -49,6 +50,7 @@ export default function Topography({ pointer, speed, isFist }: Props) {
     uniform float uRippleDecay;
     uniform float uRippleSpeed;
     uniform float uGlobalRippleStart;
+    uniform float uPeakyness;
 
     // 2D Perlin Noise
     vec4 permute(vec4 x){return mod(((x*34.0)+1.0)*x, 289.0);} 
@@ -103,6 +105,18 @@ export default function Topography({ pointer, speed, isFist }: Props) {
       vPlanePos = pos.xy;
       vec2 nUv = vUv * uNoiseScale + uNoiseOffset + vec2(0.03 * uTime);
       float h = fbm(nUv) * 0.6; // height scale
+      
+      // Apply peaky transformation when fist is detected
+      if (uPeakyness > 0.01) {
+        // Create sharp peaks by transforming the height
+        float heightFrac = fract(h * 8.0); // Increased from 3.0 to 8.0 for more peaks
+        float peaky = abs(heightFrac - 0.5) * 2.0; // V-shaped peaks
+        peaky = 1.0 - peaky; // Invert to make peaks point up
+        peaky = pow(peaky, 3.5); // Sharpen the peaks even more
+        float peakyHeight = mix(0.0, 0.5, peaky);
+        h = mix(h, h + peakyHeight, uPeakyness);
+      }
+      
       // Damped radial ripple around uRippleCenter (in plane local coords)
       float dist = distance(vPlanePos, uRippleCenter);
       if (uRippleStrength > 0.0) {
@@ -143,7 +157,7 @@ export default function Topography({ pointer, speed, isFist }: Props) {
       float line = smoothstep(uLineThickness, 0.0, d);
       // Only draw the lines; background fully transparent.
       vec3 whiteColor = uLineColor;
-      vec3 redColor = vec3(1.0, 0.0, 0.0);
+      vec3 redColor = vec3(0.8, 0.05, 0.1); // Darker crimson red
       vec3 finalColor = mix(whiteColor, redColor, uRedTint);
       vec3 color = finalColor * line * uEmissiveStrength;
       float alpha = line;
@@ -174,6 +188,10 @@ export default function Topography({ pointer, speed, isFist }: Props) {
     // Smooth red tint transition
     const targetRed = currentFist ? 1.0 : 0.0
     uniforms.uRedTint.value += (targetRed - uniforms.uRedTint.value) * 0.1
+    
+    // Smooth peaky transition
+    const targetPeaky = currentFist ? 1.0 : 0.0
+    uniforms.uPeakyness.value += (targetPeaky - uniforms.uPeakyness.value) * 0.08
     
     // Raycast pointer to get ripple center on the plane (local XY)
     if (meshRef.current) {
