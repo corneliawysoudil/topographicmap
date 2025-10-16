@@ -5,14 +5,17 @@ import * as THREE from 'three'
 type Props = {
   pointer: { x: number; y: number } | THREE.Vector2
   speed: React.MutableRefObject<number>
+  isFist?: React.MutableRefObject<boolean>
 }
 
-export default function Topography({ pointer, speed }: Props) {
+export default function Topography({ pointer, speed, isFist }: Props) {
   const materialRef = useRef<THREE.ShaderMaterial>(null!)
   const meshRef = useRef<THREE.Mesh>(null!)
   const geometry = useMemo(() => new THREE.PlaneGeometry(40, 40, 512, 512), [])
   const { camera } = useThree()
   const raycaster = useRef(new THREE.Raycaster()).current
+  const wasFist = useRef(false)
+  const fistRippleStart = useRef(-999)
 
   const uniforms = useMemo(() => ({
     uTime: { value: 0 },
@@ -28,6 +31,8 @@ export default function Topography({ pointer, speed }: Props) {
     uRippleFreq: { value: 9.5 },
     uRippleDecay: { value: 2.5 },
     uRippleSpeed: { value: 3.0 },
+    uGlobalRippleStart: { value: -999 },
+    uRedTint: { value: 0.0 },
   }), [])
 
   const vertexShader = useMemo(() => `
@@ -43,6 +48,7 @@ export default function Topography({ pointer, speed }: Props) {
     uniform float uRippleFreq;
     uniform float uRippleDecay;
     uniform float uRippleSpeed;
+    uniform float uGlobalRippleStart;
 
     // 2D Perlin Noise
     vec4 permute(vec4 x){return mod(((x*34.0)+1.0)*x, 289.0);} 
@@ -104,6 +110,15 @@ export default function Topography({ pointer, speed }: Props) {
         float ripple = exp(-uRippleDecay * dist) * sin(phase) * uRippleStrength;
         h += ripple;
       }
+      // Global fist ripple expanding from center
+      if (uGlobalRippleStart > -900.0) {
+        float elapsed = uTime - uGlobalRippleStart;
+        float distFromCenter = length(vPlanePos);
+        float waveRadius = elapsed * 8.0;
+        float waveDist = abs(distFromCenter - waveRadius);
+        float waveAmp = smoothstep(3.0, 0.0, waveDist) * smoothstep(0.0, 0.5, elapsed) * smoothstep(3.0, 1.0, elapsed);
+        h += waveAmp * 0.8;
+      }
       pos.z += h;
       vHeight = h;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
@@ -120,13 +135,17 @@ export default function Topography({ pointer, speed }: Props) {
     uniform float uEmissiveStrength;
     uniform vec3 uBaseColor;
     uniform vec3 uLineColor;
+    uniform float uRedTint;
 
     void main(){
       float f = fract(vHeight / uLineStep);
       float d = abs(f - 0.5) * 2.0;
       float line = smoothstep(uLineThickness, 0.0, d);
       // Only draw the lines; background fully transparent.
-      vec3 color = uLineColor * line * uEmissiveStrength;
+      vec3 whiteColor = uLineColor;
+      vec3 redColor = vec3(1.0, 0.0, 0.0);
+      vec3 finalColor = mix(whiteColor, redColor, uRedTint);
+      vec3 color = finalColor * line * uEmissiveStrength;
       float alpha = line;
       if (alpha <= 0.001) discard;
       gl_FragColor = vec4(color, alpha);
@@ -142,6 +161,20 @@ export default function Topography({ pointer, speed }: Props) {
     const base = 1.0
     const boost = 0.1 * (speed.current || 0)
     uniforms.uEmissiveStrength.value = base + boost
+    
+    // Fist gesture: trigger global ripple and fade to red
+    const currentFist = isFist?.current ?? false
+    if (currentFist && !wasFist.current) {
+      // Fist detected - trigger ripple
+      fistRippleStart.current = uniforms.uTime.value
+      uniforms.uGlobalRippleStart.value = uniforms.uTime.value
+    }
+    wasFist.current = currentFist
+    
+    // Smooth red tint transition
+    const targetRed = currentFist ? 1.0 : 0.0
+    uniforms.uRedTint.value += (targetRed - uniforms.uRedTint.value) * 0.1
+    
     // Raycast pointer to get ripple center on the plane (local XY)
     if (meshRef.current) {
       raycaster.setFromCamera(new THREE.Vector2(px, py), camera)

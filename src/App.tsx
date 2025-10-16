@@ -20,7 +20,7 @@ function App() {
       >
         <color attach="background" args={[0.04, 0.04, 0.04]} />
         <Suspense fallback={null}>
-          <Scene hand={{ pointer: hand.pointer, confidence: hand.confidence }} />
+          <Scene hand={{ pointer: hand.pointer, confidence: hand.confidence, isFist: hand.isFist }} />
         </Suspense>
       </Canvas>
     </div>

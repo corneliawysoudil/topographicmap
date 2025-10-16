@@ -5,7 +5,7 @@ import useMouseSpring from './hooks/useMouseSpring'
 import type { Vector2 } from 'three'
 import { useRef } from 'react'
 
-type HandInput = { pointer: Vector2; confidence: React.MutableRefObject<number> }
+type HandInput = { pointer: Vector2; confidence: React.MutableRefObject<number>; isFist: React.MutableRefObject<boolean> }
 
 export default function Scene({ hand }: { hand?: HandInput }) {
   useThree()
@@ -23,7 +23,7 @@ export default function Scene({ hand }: { hand?: HandInput }) {
     <>
       <ambientLight intensity={0.15} />
       <directionalLight position={[2, 3, 2]} intensity={0.15} />
-      <Topography pointer={chosen.current} speed={speed} />
+      <Topography pointer={chosen.current} speed={speed} isFist={hand?.isFist} />
       <EffectComposer>
         <Bloom intensity={0.35} luminanceThreshold={0.7} luminanceSmoothing={0.9} mipmapBlur />
       </EffectComposer>

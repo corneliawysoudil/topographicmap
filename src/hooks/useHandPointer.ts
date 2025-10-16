@@ -8,6 +8,7 @@ type HandPointer = {
   zDepth: number
   video: HTMLVideoElement | null
   landmarks: { x: number; y: number }[] | null
+  isFist: React.MutableRefObject<boolean>
 }
 
 export default function useHandPointer() {
@@ -18,6 +19,7 @@ export default function useHandPointer() {
   const landmarksRef = useRef<{ x: number; y: number }[] | null>(null)
   const handRef = useRef<HandLandmarker | null>(null)
   const rafHandle = useRef<number | null>(null)
+  const isFistRef = useRef(false)
 
   useEffect(() => {
     let stopped = false
@@ -57,7 +59,7 @@ export default function useHandPointer() {
             const now = performance.now()
             const result = handRef.current.detectForVideo(video, now)
             const lm = result.landmarks && result.landmarks[0]
-            if (lm && lm.length > 8) {
+            if (lm && lm.length > 20) {
               const tip = lm[8] // index fingertip
               // x,y in [0..1] (video coords); convert to normalized [-1,1], Y up
               // Mirror X so hand-left = cursor-left (natural for user-facing camera)
@@ -70,9 +72,21 @@ export default function useHandPointer() {
               zDepthRef.current = -tip.z || 0
               // store all normalized landmarks
               landmarksRef.current = lm.map((p) => ({ x: p.x, y: p.y }))
+              
+              // Fist detection: check if all fingertips are close to wrist
+              const wrist = lm[0]
+              const fingertips = [lm[4], lm[8], lm[12], lm[16], lm[20]]
+              const distances = fingertips.map(ft => {
+                const dx = ft.x - wrist.x
+                const dy = ft.y - wrist.y
+                return Math.sqrt(dx * dx + dy * dy)
+              })
+              const maxDist = Math.max(...distances)
+              isFistRef.current = maxDist < 0.15 // threshold for fist
             } else {
               confidenceRef.current = 0
               landmarksRef.current = null
+              isFistRef.current = false
             }
           }
           rafHandle.current = requestAnimationFrame(loop)
@@ -107,6 +121,7 @@ export default function useHandPointer() {
     zDepth: zDepthRef.current,
     video: videoRef.current,
     landmarks: landmarksRef.current,
+    isFist: isFistRef,
   } as HandPointer
 }
 
