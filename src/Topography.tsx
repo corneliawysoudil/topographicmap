@@ -133,7 +133,7 @@ export default function Topography({ pointer, speed }: Props) {
     }
   `, [])
 
-  useFrame((state, dt) => {
+  useFrame((_, dt) => {
     uniforms.uTime.value += dt
     const px = (pointer as any).x ?? 0
     const py = (pointer as any).y ?? 0
@@ -144,11 +144,12 @@ export default function Topography({ pointer, speed }: Props) {
     uniforms.uEmissiveStrength.value = base + boost
     // Raycast pointer to get ripple center on the plane (local XY)
     if (meshRef.current) {
-      raycaster.setFromCamera({ x: px, y: py }, camera)
+      raycaster.setFromCamera(new THREE.Vector2(px, py), camera)
       const hit = raycaster.intersectObject(meshRef.current, false)[0]
       if (hit) {
         const local = meshRef.current.worldToLocal(hit.point.clone())
         uniforms.uRippleCenter.value.set(local.x, local.y)
+        // Optionally boost from hand Z via speed ref surrogate (kept subtle)
         uniforms.uRippleStrength.value = 0.15 + (speed.current || 0) * 0.2
       } else {
         uniforms.uRippleStrength.value = 0.0
